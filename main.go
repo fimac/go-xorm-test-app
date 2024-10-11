@@ -28,36 +28,100 @@ type EncryptedColumn struct {
 }
 
 type Example struct {
-	Id            int64           `xorm:"pk autoincr"`
-	Text          string          `xorm:"varchar(100)"`
-	EncryptedText json.RawMessage `json:"encrypted_text" xorm:"jsonb 'encrypted_text'"`
-	// DecryptedText  string          `xorm:"-"` // This ignores the field and only uses it in memory for the struct. It does not create a field in the table.
-	EncryptedJsonb json.RawMessage `json:"encrypted_jsonb" xorm:"jsonb 'encrypted_jsonb'"`
+	Id             int64      `xorm:"pk autoincr"`
+	Text           string     `xorm:"varchar(100)"`
+	EncryptedText  JSONString `json:"encrypted_text" xorm:"jsonb 'encrypted_text'"`
+	EncryptedJsonb JSONString `json:"encrypted_jsonb" xorm:"jsonb 'encrypted_jsonb'"`
 }
 
 func (Example) TableName() string {
 	return "examples"
 }
 
-// func (e *Example) AfterSet(colName string, _ xorm.Cell) {
-// 	if colName == "encrypted_text" && len(e.EncryptedText) > 0 {
+type JSONString string
 
-// 		text, err := deserialize(e.EncryptedText)
-// 		if err == nil {
-// 			e.DecryptedText = text
-// 		}
-// 	}
-// }
+func (j *JSONString) FromDB(data []byte) error {
+	*j = JSONString(data)
+	return nil
+}
 
-func serialize(value any, table string, column string) (json.RawMessage, error) {
-	data := EncryptedColumn{"pt", value, TableColumn{table, column}, 1}
+func (j JSONString) ToDB() (json.RawMessage, error) {
+	var js json.RawMessage
+	fmt.Println("to jjjjjjjj", j)
+	if err := json.Unmarshal([]byte(j), &js); err != nil {
+		return nil, fmt.Errorf("invalid JSON format: %v", err)
+	}
+	fmt.Println("to jssssss", js)
+	return []byte(j), nil
+}
 
-	jsonData, err := json.Marshal(data)
+func (e *Example) BeforeInsert() {
+	// var encryptedText EncryptedColumn
+	// var encryptedJsonb EncryptedColumn
+
+	// errText := json.Unmarshal([]byte(e.EncryptedText), &encryptedText)
+	// if errText != nil {
+	// 	log.Fatalf("Error unmarshaling text: %v", errText)
+	// }
+	// errJson := json.Unmarshal([]byte(e.EncryptedJsonb), &encryptedJsonb)
+	// if errJson != nil {
+	// 	log.Fatalf("Error unmarshaling jsonb: %v", errJson)
+	// }
+
+	// Serialize text
+	textData, err := json.Marshal(e.EncryptedText)
 	if err != nil {
-		return nil, fmt.Errorf("failed to serialize data: %v", err)
+		log.Fatalf("Error serializing json: %v", err)
 	}
 
-	return json.RawMessage(jsonData), nil
+	// Serialize json
+	jsonData, err := json.Marshal(e.EncryptedJsonb)
+	if err != nil {
+		log.Fatalf("Error serializing json: %v", err)
+	}
+
+	e.EncryptedText = JSONString(textData)
+	e.EncryptedText = JSONString(jsonData)
+}
+
+func serialize(value any, table string, column string) (JSONString, error) {
+	//  `{"x1": 10, "y1": 20, "x2": 30, "y2": 40}`
+	fmt.Println("hitting here")
+	str, err := convertToString(value)
+	if err != nil {
+		fmt.Println("Error:", err)
+	} else {
+		fmt.Println("Converted value to string:", str)
+	}
+	data := EncryptedColumn{"pt", value, TableColumn{table, column}, 1}
+	// jsonData, err := json.Marshal(data)
+	// if err != nil {
+	// 	return "", fmt.Errorf("failed to serialize data: %v", err)
+	// }
+	return JSONString(data)
+
+}
+
+func convertToString(value any) (string, error) {
+	fmt.Println("value in conversion", value)
+	switch v := value.(type) {
+	case string:
+		return v, nil
+	case int:
+		return fmt.Sprintf("%d", v), nil
+	case float64:
+		return fmt.Sprintf("%f", v), nil
+	case json.RawMessage:
+		return string(v), nil
+	case map[string]interface{}:
+		jsonData, err := json.Marshal(v)
+		if err != nil {
+			return "", fmt.Errorf("error marshaling JSON: %v", err)
+		}
+		return string(jsonData), nil
+	default:
+		return "", fmt.Errorf("unsupported type: %T", v)
+	}
 }
 
 // func deserialize(data []byte) (string, error) {
@@ -145,14 +209,14 @@ func main() {
 
 	// Query on encrypted column.
 
-	// // MATCH
-	MatchQueryLongString(devEngine)
+	// // // MATCH
+	// MatchQueryLongString(devEngine)
 
-	MatchQueryEmail(devEngine)
+	// MatchQueryEmail(devEngine)
 
-	// JSONB data query
-	JsonbQuery(devEngine)
-	// ORE
+	// // JSONB data query
+	// JsonbQuery(devEngine)
+	// // ORE
 
-	// Unique
+	// // Unique
 }
